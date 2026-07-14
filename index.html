@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Alain Milliat — Account Visit Report</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    :root { --navy: #1a1a2e; --accent: #7a1f2b; --line: #e2e2e8; --muted: #888; }
+    html, body { background: #f4f4f7; color: var(--navy);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    #root { max-width: 520px; margin: 0 auto; }
+    .app { padding: 0 16px 48px; }
+    header { text-align: center; padding: 28px 0 18px; }
+    header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    header p { color: var(--accent); font-weight: 600; font-size: 14px; margin-top: 4px; }
+    header .sub { color: var(--muted); font-weight: 500; font-size: 12px; margin-top: 2px; }
+    form { display: flex; flex-direction: column; gap: 16px; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field > label { font-size: 13px; font-weight: 600; color: var(--navy); }
+    .field .req { color: var(--accent); }
+    input[type="text"], input[type="number"], input[type="date"], select, textarea {
+      width: 100%; font-size: 16px; padding: 12px 14px; border: 1.5px solid var(--line);
+      border-radius: 12px; background: #fff; color: var(--navy); appearance: none; -webkit-appearance: none; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--navy); }
+    select:disabled { background: #f0f0f3; color: #aaa; }
+    textarea { resize: vertical; min-height: 60px; }
+    .hint { font-size: 11px; color: var(--muted); }
+    .chk-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chk { display: flex; align-items: center; gap: 6px; border: 1.5px solid var(--line);
+      border-radius: 10px; padding: 8px 11px; background: #fff; font-size: 13px; cursor: pointer;
+      user-select: none; }
+    .chk.on { border-color: var(--navy); background: var(--navy); color: #fff; font-weight: 600; }
+    .chk input { display: none; }
+    .section { border: 1.5px solid var(--line); border-radius: 14px; padding: 14px; background: #fafafb;
+      display: flex; flex-direction: column; gap: 12px; }
+    .section > h3 { font-size: 14px; font-weight: 700; color: var(--accent); }
+    button.submit { margin-top: 8px; background: var(--navy); color: #fff; border: none; border-radius: 14px;
+      padding: 16px; font-size: 16px; font-weight: 700; cursor: pointer; }
+    button.submit:disabled { opacity: 0.5; }
+    .error-msg { color: #c0392b; font-size: 13px; font-weight: 600; text-align: center; }
+    .screen { min-height: 80vh; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center; padding: 24px; gap: 14px; }
+    .icon { width: 72px; height: 72px; border-radius: 50%; background: #1e7e46; color: #fff;
+      font-size: 38px; display: flex; align-items: center; justify-content: center; }
+    .screen h2 { font-size: 22px; } .screen p { color: var(--muted); font-size: 15px; max-width: 320px; }
+    .route-note { font-size: 11px; color: var(--muted); }
+    img.preview { width: 100%; border-radius: 10px; max-height: 220px; object-fit: cover; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+    const { useState } = React;
+
+    // ---- Photo host (reused from The Gardener) ----
+    const CLOUDINARY_CLOUD = 'dcpdnadwy';
+    const CLOUDINARY_PRESET = 'fp-visits';
+
+    // ---- Market -> Formspree routing (RI & TN route to the "Other" form) ----
+    const FORM_ENDPOINTS = {
+      'NY': 'xpqvwdbz', 'CT': 'xpqvwdbz', 'NJ': 'xpqvwdbz',
+      'FL': 'xrenbqjq',
+      'CA South': 'xzdnzrjq', 'CA North': 'xzdnzrjq',
+      'CO': 'mzdnzvqz', 'MA': 'mzdnzvqz', 'NV': 'mzdnzvqz', 'GA': 'mzdnzvqz',
+      'TX': 'mzdnzvqz', 'RI': 'mzdnzvqz', 'TN': 'mzdnzvqz', 'Other': 'mzdnzvqz',
+    };
+    const endpointFor = (market) =>
+      market && FORM_ENDPOINTS[market]
+        ? `https://formspree.io/f/${FORM_ENDPOINTS[market]}`
+        : null;
+
+    const LEXICON = {
+      markets: ['NY', 'FL', 'CA South', 'CA North', 'CT', 'CO', 'MA', 'NJ', 'NV', 'GA', 'RI', 'TX', 'TN', 'Other'],
+      channels: ['On Premise', 'Off premise', 'Other Channel'],
+      categoriesOnPrem: ['Cafe Bakery', 'Hotel', 'Restaurant', 'Restaurant - French', 'Caterer', 'Cocktail Bar', 'Country Club', 'Member Club', 'Duty Free'],
+      categoriesRetail: ['Grocery Chains', 'Independent Store', 'Subscription Club'],
+      categoriesOther: ['Luxury Stores', 'Private Client', 'Spa', 'Private Chef'],
+      buyingRoles: ['Decision Maker', 'Influencer', 'Staff'],
+      salesPipeline: [
+        '1- Qualified Lead / Buyer not in',
+        '2- Buyer Identified & Contacted',
+        '3- Booked meeting',
+        '4- Presentation/ Opportunity Follow Up',
+        '5a- New Placement',
+        '5b- Commitment',
+        '5c- Negotiation (Corporate Approval, Pricing)',
+        '6- Reorder Customer',
+        '7- Activation Customer',
+        '[Buyer not interested]',
+        '[Account Not Qualified]',
+        '[Lost Account]',
+      ],
+      beverages: ['Cox Apple', 'Cranberry', 'Ginger Extract', 'Grapefruit', 'Orange Sicily', 'Pineapple', 'Tomato', 'Apricot', 'Mango', 'Passionfruit', 'Passion Extract', 'Pear', 'Pinot Noir Sparkling', 'Raspberry', 'Strawberry', 'White Peach', 'Yuzu Extract'],
+      beveragePlacements: ['POD', 'Cocktail Menu', 'Mocktail Menu', 'Happy Hour Special', 'Food Pairing', 'Display', 'Other Merchandising'],
+      jams: ['Apricot', 'Wild Blueberry', 'Morelo Cherry', 'Purple Fig', 'Blond Orange', 'Raspberry', 'Sengana Strawberry'],
+      condiments: ['Ketchup', 'Mayo', 'Mustard'],
+      setups: ['Work With Distributor', 'Business Development'],
+      teams: ['Paul Forniaux', 'Edgar Jaboulet', 'Noemie Mouly', 'Laurent Cutier', 'Mathieu Perrin', 'Finesaler Team', 'Savory Gourmet Team'],
+    };
+
+    const today = () => new Date().toISOString().split('T')[0];
+
+    const initialForm = {
+      dateVisit: today(), market: '', city: '', neighborhood: '', customerName: '',
+      channel: '', category: '', metWith: '', position: '', buyingRole: '', salesPipeline: '',
+      beverageConsidered: [], beveragePlacement: [], jamConsidered: [], condimentConsidered: [],
+      comments: '', actionPoint: '', preferredDistributor: '', setUp: '', teamMember: '', pictureUrl: '',
+    };
+
+    async function uploadToCloudinary(file) {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('upload_preset', CLOUDINARY_PRESET);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method: 'POST', body: fd });
+      const data = await res.json();
+      return data.secure_url;
+    }
+
+    function CheckGroup({ options, selected, onToggle }) {
+      return (
+        <div className="chk-group">
+          {options.map((o) => {
+            const on = selected.includes(o);
+            return (
+              <label key={o} className={on ? 'chk on' : 'chk'}>
+                <input type="checkbox" checked={on} onChange={() => onToggle(o)} />
+                {o}
+              </label>
+            );
+          })}
+        </div>
+      );
+    }
+
+    function App() {
+      const [form, setForm] = useState(initialForm);
+      const [status, setStatus] = useState('idle');
+      const [confirming, setConfirming] = useState(false);
+      const [photoFile, setPhotoFile] = useState(null);
+      const [photoPreview, setPhotoPreview] = useState(null);
+      const [photoStatus, setPhotoStatus] = useState('idle');
+
+      const set = (field) => (e) => {
+        const value = e.target.value;
+        setForm((prev) => {
+          const next = { ...prev, [field]: value };
+          if (field === 'channel') next.category = '';
+          return next;
+        });
+      };
+
+      const toggle = (field) => (option) => {
+        setForm((prev) => {
+          const arr = prev[field];
+          const next = arr.includes(option) ? arr.filter((x) => x !== option) : [...arr, option];
+          const updated = { ...prev, [field]: next };
+          if (field === 'beverageConsidered' && next.length === 0) updated.beveragePlacement = [];
+          return updated;
+        });
+      };
+
+      const categories =
+        form.channel === 'On Premise' ? LEXICON.categoriesOnPrem
+        : form.channel === 'Off premise' ? LEXICON.categoriesRetail
+        : form.channel === 'Other Channel' ? LEXICON.categoriesOther
+        : [];
+
+      const handlePhoto = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setPhotoFile(file);
+        setPhotoPreview(URL.createObjectURL(file));
+        setPhotoStatus('ready');
+      };
+
+      const handleSubmitClick = (e) => {
+        e.preventDefault();
+        setConfirming(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
+      const handleConfirm = async () => {
+        setConfirming(false);
+        setStatus('submitting');
+        const endpoint = endpointFor(form.market);
+        if (!endpoint) { setStatus('error'); return; }
+
+        let pictureUrl = '';
+        if (photoFile) {
+          setPhotoStatus('uploading');
+          try { pictureUrl = await uploadToCloudinary(photoFile); setPhotoStatus('done'); }
+          catch { setPhotoStatus('error'); }
+        }
+
+        const payload = {
+          ...form,
+          beverageConsidered: form.beverageConsidered.join(', '),
+          beveragePlacement: form.beveragePlacement.join(', '),
+          jamConsidered: form.jamConsidered.join(', '),
+          condimentConsidered: form.condimentConsidered.join(', '),
+          pictureUrl,
+        };
+
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) {
+            setStatus('success');
+            setForm(initialForm);
+            setPhotoFile(null); setPhotoPreview(null); setPhotoStatus('idle');
+          } else { setStatus('error'); }
+        } catch { setStatus('error'); }
+      };
+
+      if (status === 'success') {
+        return (
+          <div className="screen">
+            <div className="icon">✓</div>
+            <h2>Visit logged!</h2>
+            <p>Your Alain Milliat account visit has been saved successfully.</p>
+            <button className="submit" style={{ maxWidth: 320 }} onClick={() => setStatus('idle')}>Log another visit</button>
+          </div>
+        );
+      }
+
+      if (confirming) {
+        const ep = FORM_ENDPOINTS[form.market];
+        return (
+          <div className="screen">
+            <div className="icon" style={{ background: '#e67e22' }}>?</div>
+            <h2>Are you sure?</h2>
+            <p>Please confirm you are ready to submit this visit report.</p>
+            <p className="route-note">Market <b>{form.market}</b> → form <b>{ep}</b></p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 320 }}>
+              <button className="submit" onClick={handleConfirm}>✓ Yes, Submit</button>
+              <button className="submit" style={{ background: '#fff', color: 'var(--navy)', border: '2px solid var(--navy)' }} onClick={() => { setConfirming(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>← Keep Editing</button>
+            </div>
+          </div>
+        );
+      }
+
+      const Req = () => <span className="req"> *</span>;
+
+      return (
+        <div className="app">
+          <header>
+            <h1>Account Visit Report</h1>
+            <p>Alain Milliat</p>
+            <p className="sub">Famille Perrin Inc.</p>
+          </header>
+          <form onSubmit={handleSubmitClick}>
+            <div className="field">
+              <label>Date Visit<Req /></label>
+              <input type="date" required value={form.dateVisit} onChange={set('dateVisit')} />
+            </div>
+
+            <div className="field">
+              <label>Market<Req /></label>
+              <select required value={form.market} onChange={set('market')}>
+                <option value="">Select market...</option>
+                {LEXICON.markets.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>City</label>
+              <input type="text" maxLength={50} placeholder="Max 50 characters" value={form.city} onChange={set('city')} />
+            </div>
+
+            <div className="field">
+              <label>Area / Neighborhood</label>
+              <input type="text" maxLength={100} placeholder="eg SoHo, Beverly Hills, Wynwood" value={form.neighborhood} onChange={set('neighborhood')} />
+            </div>
+
+            <div className="field">
+              <label>Customer Name<Req /></label>
+              <input type="text" required maxLength={200} placeholder="Max 200 characters" value={form.customerName} onChange={set('customerName')} />
+            </div>
+
+            <div className="field">
+              <label>Channel<Req /></label>
+              <select required value={form.channel} onChange={set('channel')}>
+                <option value="">Select channel...</option>
+                {LEXICON.channels.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>Category<Req /></label>
+              <select required value={form.category} onChange={set('category')} disabled={!form.channel}>
+                <option value="">{form.channel ? 'Select category...' : 'Select channel first'}</option>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>Met With</label>
+              <input type="text" maxLength={200} placeholder="Name(s), buyer(s) only" value={form.metWith} onChange={set('metWith')} />
+            </div>
+
+            <div className="field">
+              <label>Position</label>
+              <input type="text" maxLength={200} placeholder="Title(s), buyer(s) only" value={form.position} onChange={set('position')} />
+            </div>
+
+            <div className="field">
+              <label>Buying Role<Req /></label>
+              <select required value={form.buyingRole} onChange={set('buyingRole')}>
+                <option value="">Select role...</option>
+                {LEXICON.buyingRoles.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>Sales Pipeline<Req /></label>
+              <select required value={form.salesPipeline} onChange={set('salesPipeline')}>
+                <option value="">Select stage...</option>
+                {LEXICON.salesPipeline.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            <div className="section">
+              <h3>Beverage Considered</h3>
+              <CheckGroup options={LEXICON.beverages} selected={form.beverageConsidered} onToggle={toggle('beverageConsidered')} />
+              {form.beverageConsidered.length > 0 && (
+                <div className="field">
+                  <label>Placement Specific for Beverage</label>
+                  <CheckGroup options={LEXICON.beveragePlacements} selected={form.beveragePlacement} onToggle={toggle('beveragePlacement')} />
+                </div>
+              )}
+            </div>
+
+            <div className="section">
+              <h3>Jam Considered</h3>
+              <CheckGroup options={LEXICON.jams} selected={form.jamConsidered} onToggle={toggle('jamConsidered')} />
+            </div>
+
+            <div className="section">
+              <h3>Condiment Considered</h3>
+              <CheckGroup options={LEXICON.condiments} selected={form.condimentConsidered} onToggle={toggle('condimentConsidered')} />
+            </div>
+
+            <div className="field">
+              <label>Comments</label>
+              <textarea maxLength={600} rows={3} placeholder="e.g. SKU sizes, competitor presence, key takeaways" value={form.comments} onChange={set('comments')} />
+            </div>
+
+            <div className="field">
+              <label>Action Point / Follow Up</label>
+              <textarea maxLength={600} rows={3} placeholder="Key action points" value={form.actionPoint} onChange={set('actionPoint')} />
+            </div>
+
+            <div className="field">
+              <label>Preferred Distributor</label>
+              <input type="text" maxLength={200} placeholder="Max 200 characters" value={form.preferredDistributor} onChange={set('preferredDistributor')} />
+            </div>
+
+            <div className="field">
+              <label>Set Up</label>
+              <select value={form.setUp} onChange={set('setUp')}>
+                <option value="">Select setup...</option>
+                {LEXICON.setups.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>Team Member<Req /></label>
+              <select required value={form.teamMember} onChange={set('teamMember')}>
+                <option value="">Select team member...</option>
+                {LEXICON.teams.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>Pictures</label>
+              <input type="file" accept="image/*" capture="environment" onChange={handlePhoto} />
+              {photoPreview && (
+                <div>
+                  <img className="preview" src={photoPreview} alt="Preview" />
+                  {photoStatus === 'uploading' && <p className="hint">⏳ Uploading photo...</p>}
+                  {photoStatus === 'done' && <p className="hint" style={{ color: 'green' }}>✓ Photo uploaded</p>}
+                  {photoStatus === 'error' && <p className="hint" style={{ color: 'red' }}>Photo upload failed — form will still submit</p>}
+                </div>
+              )}
+            </div>
+
+            {status === 'error' && <p className="error-msg">Something went wrong (check the Market is selected). Please try again.</p>}
+
+            <button className="submit" type="submit" disabled={status === 'submitting'}>
+              {status === 'submitting' ? 'Saving...' : 'Submit Visit'}
+            </button>
+          </form>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
