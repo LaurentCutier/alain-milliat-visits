@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Alain Milliat &mdash; Account Visit Report</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    :root { --navy: #1a1a2e; --accent: #7a1f2b; --line: #e2e2e8; --muted: #888; }
+    html, body { background: #f4f4f7; color: var(--navy);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    #root { max-width: 520px; margin: 0 auto; }
+    .app { padding: 0 16px 48px; }
+    header { text-align: center; padding: 28px 0 18px; }
+    header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    header p { color: var(--accent); font-weight: 600; font-size: 14px; margin-top: 4px; }
+    header .sub { color: var(--muted); font-weight: 500; font-size: 12px; margin-top: 2px; }
+    form { display: flex; flex-direction: column; gap: 16px; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field > label { font-size: 13px; font-weight: 600; color: var(--navy); }
+    .field .req { color: var(--accent); }
+    input[type="text"], input[type="number"], input[type="date"], select, textarea {
+      width: 100%; font-size: 16px; padding: 12px 14px; border: 1.5px solid var(--line);
+      border-radius: 12px; background: #fff; color: var(--navy); appearance: none; -webkit-appearance: none; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--navy); }
+    select:disabled { background: #f0f0f3; color: #aaa; }
+    textarea { resize: vertical; min-height: 60px; }
+    .hint { font-size: 11px; color: var(--muted); }
+    .chk-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chk { display: flex; align-items: center; gap: 6px; border: 1.5px solid var(--line);
+      border-radius: 10px; padding: 8px 11px; background: #fff; font-size: 13px; cursor: pointer; user-select: none; }
+    .chk.on { border-color: var(--navy); background: var(--navy); color: #fff; font-weight: 600; }
+    .chk input { display: none; }
+    .section { border: 1.5px solid var(--line); border-radius: 14px; padding: 14px; background: #fafafb;
+      display: flex; flex-direction: column; gap: 12px; }
+    .section > h3 { font-size: 14px; font-weight: 700; color: var(--accent); }
+    button.submit { margin-top: 8px; background: var(--navy); color: #fff; border: none; border-radius: 14px;
+      padding: 16px; font-size: 16px; font-weight: 700; cursor: pointer; }
+    button.submit:disabled { opacity: 0.5; }
+    .error-msg { color: #c0392b; font-size: 13px; font-weight: 600; text-align: center; }
+    .screen { min-height: 80vh; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; text-align: center; padding: 24px; gap: 14px; }
+    .icon { width: 72px; height: 72px; border-radius: 50%; background: #1e7e46; color: #fff;
+      font-size: 38px; display: flex; align-items: center; justify-content: center; }
+    .screen h2 { font-size: 22px; } .screen p { color: var(--muted); font-size: 15px; max-width: 320px; }
+    .route-note { font-size: 11px; color: var(--muted); }
+    img.preview { width: 100%; border-radius: 10px; max-height: 220px; object-fit: cover; margin-top: 8px; }
+    #boot-error { display:none; padding:20px; margin:16px; border:1.5px solid #c0392b; border-radius:12px;
+      color:#c0392b; font-size:14px; background:#fff; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <div id="boot-error"></div>
+  <script>
+    window.addEventListener('error', function (e) {
+      var box = document.getElementById('boot-error');
+      if (box) { box.style.display = 'block';
+        box.textContent = 'Load error: ' + (e.message || e) + '. Check your internet connection and reload.'; }
+    });
+  </script>
+  <script>
+const {
+  useState
+} = React;
+
+// ---- Photo host (reused from The Gardener) ----
+const CLOUDINARY_CLOUD = 'dcpdnadwy';
+const CLOUDINARY_PRESET = 'fp-visits';
+
+// ---- Market -> Formspree routing (RI & TN route to the "Other" form) ----
+const FORM_ENDPOINTS = {
+  'NY': 'xpqvwdbz',
+  'CT': 'xpqvwdbz',
+  'NJ': 'xpqvwdbz',
+  'FL': 'xrenbqjq',
+  'CA South': 'xzdnzrjq',
+  'CA North': 'xzdnzrjq',
+  'CO': 'mzdnzvqz',
+  'MA': 'mzdnzvqz',
+  'NV': 'mzdnzvqz',
+  'GA': 'mzdnzvqz',
+  'TX': 'mzdnzvqz',
+  'RI': 'mzdnzvqz',
+  'TN': 'mzdnzvqz',
+  'Other': 'mzdnzvqz'
+};
+const endpointFor = market => market && FORM_ENDPOINTS[market] ? `https://formspree.io/f/${FORM_ENDPOINTS[market]}` : null;
+const LEXICON = {
+  markets: ['NY', 'FL', 'CA South', 'CA North', 'CT', 'CO', 'MA', 'NJ', 'NV', 'GA', 'RI', 'TX', 'TN', 'Other'],
+  channels: ['On Premise', 'Off premise', 'Other Channel'],
+  categoriesOnPrem: ['Cafe Bakery', 'Hotel', 'Restaurant', 'Restaurant - French', 'Caterer', 'Cocktail Bar', 'Country Club', 'Member Club', 'Duty Free'],
+  categoriesRetail: ['Grocery Chains', 'Independent Store', 'Subscription Club'],
+  categoriesOther: ['Luxury Stores', 'Private Client', 'Spa', 'Private Chef'],
+  buyingRoles: ['Decision Maker', 'Influencer', 'Staff'],
+  salesPipeline: ['1- Qualified Lead / Buyer not in', '2- Buyer Identified & Contacted', '3- Booked meeting', '4- Presentation/ Opportunity Follow Up', '5a- New Placement', '5b- Commitment', '5c- Negotiation (Corporate Approval, Pricing)', '6- Reorder Customer', '7- Activation Customer', '[Buyer not interested]', '[Account Not Qualified]', '[Lost Account]'],
+  beverages: ['Cox Apple', 'Cranberry', 'Ginger Extract', 'Grapefruit', 'Orange Sicily', 'Pineapple', 'Tomato', 'Apricot', 'Mango', 'Passionfruit', 'Passion Extract', 'Pear', 'Pinot Noir Sparkling', 'Raspberry', 'Strawberry', 'White Peach', 'Yuzu Extract'],
+  beveragePlacements: ['POD', 'Cocktail Menu', 'Mocktail Menu', 'Happy Hour Special', 'Food Pairing', 'Display', 'Other Merchandising'],
+  jams: ['Apricot', 'Wild Blueberry', 'Morelo Cherry', 'Purple Fig', 'Blond Orange', 'Raspberry', 'Sengana Strawberry'],
+  condiments: ['Ketchup', 'Mayo', 'Mustard'],
+  setups: ['Work With Distributor', 'Business Development'],
+  teams: ['Paul Forniaux', 'Edgar Jaboulet', 'Noemie Mouly', 'Laurent Cutier', 'Mathieu Perrin', 'Finesaler Team', 'Savory Gourmet Team']
+};
+const today = () => new Date().toISOString().split('T')[0];
+const initialForm = {
+  dateVisit: today(),
+  market: '',
+  city: '',
+  neighborhood: '',
+  customerName: '',
+  channel: '',
+  category: '',
+  metWith: '',
+  position: '',
+  buyingRole: '',
+  salesPipeline: '',
+  beverageConsidered: [],
+  beveragePlacement: [],
+  jamConsidered: [],
+  condimentConsidered: [],
+  comments: '',
+  actionPoint: '',
+  preferredDistributor: '',
+  setUp: '',
+  teamMember: '',
+  pictureUrl: ''
+};
+async function uploadToCloudinary(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_preset', CLOUDINARY_PRESET);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+    method: 'POST',
+    body: fd
+  });
+  const data = await res.json();
+  return data.secure_url;
+}
+function CheckGroup({
+  options,
+  selected,
+  onToggle
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    className: "chk-group"
+  }, options.map(o => {
+    const on = selected.includes(o);
+    return /*#__PURE__*/React.createElement("label", {
+      key: o,
+      className: on ? 'chk on' : 'chk'
+    }, /*#__PURE__*/React.createElement("input", {
+      type: "checkbox",
+      checked: on,
+      onChange: () => onToggle(o)
+    }), o);
+  }));
+}
+function App() {
+  const [form, setForm] = useState(initialForm);
+  const [status, setStatus] = useState('idle');
+  const [confirming, setConfirming] = useState(false);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoStatus, setPhotoStatus] = useState('idle');
+  const set = field => e => {
+    const value = e.target.value;
+    setForm(prev => {
+      const next = {
+        ...prev,
+        [field]: value
+      };
+      if (field === 'channel') next.category = '';
+      return next;
+    });
+  };
+  const toggle = field => option => {
+    setForm(prev => {
+      const arr = prev[field];
+      const next = arr.includes(option) ? arr.filter(x => x !== option) : [...arr, option];
+      const updated = {
+        ...prev,
+        [field]: next
+      };
+      if (field === 'beverageConsidered' && next.length === 0) updated.beveragePlacement = [];
+      return updated;
+    });
+  };
+  const categories = form.channel === 'On Premise' ? LEXICON.categoriesOnPrem : form.channel === 'Off premise' ? LEXICON.categoriesRetail : form.channel === 'Other Channel' ? LEXICON.categoriesOther : [];
+  const handlePhoto = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+    setPhotoStatus('ready');
+  };
+  const handleSubmitClick = e => {
+    e.preventDefault();
+    setConfirming(true);
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
+  };
+  const handleConfirm = async () => {
+    setConfirming(false);
+    setStatus('submitting');
+    const endpoint = endpointFor(form.market);
+    if (!endpoint) {
+      setStatus('error');
+      return;
+    }
+    let pictureUrl = '';
+    if (photoFile) {
+      setPhotoStatus('uploading');
+      try {
+        pictureUrl = await uploadToCloudinary(photoFile);
+        setPhotoStatus('done');
+      } catch {
+        setPhotoStatus('error');
+      }
+    }
+    const payload = {
+      ...form,
+      beverageConsidered: form.beverageConsidered.join(', '),
+      beveragePlacement: form.beveragePlacement.join(', '),
+      jamConsidered: form.jamConsidered.join(', '),
+      condimentConsidered: form.condimentConsidered.join(', '),
+      pictureUrl
+    };
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        setStatus('success');
+        setForm(initialForm);
+        setPhotoFile(null);
+        setPhotoPreview(null);
+        setPhotoStatus('idle');
+      } else {
+        setStatus('error');
+      }
+    } catch {
+      setStatus('error');
+    }
+  };
+  if (status === 'success') {
+    return /*#__PURE__*/React.createElement("div", {
+      className: "screen"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "icon"
+    }, "✓"), /*#__PURE__*/React.createElement("h2", null, "Visit logged!"), /*#__PURE__*/React.createElement("p", null, "Your Alain Milliat account visit has been saved successfully."), /*#__PURE__*/React.createElement("button", {
+      className: "submit",
+      style: {
+        maxWidth: 320
+      },
+      onClick: () => setStatus('idle')
+    }, "Log another visit"));
+  }
+  if (confirming) {
+    const ep = FORM_ENDPOINTS[form.market];
+    return /*#__PURE__*/React.createElement("div", {
+      className: "screen"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "icon",
+      style: {
+        background: '#e67e22'
+      }
+    }, "?"), /*#__PURE__*/React.createElement("h2", null, "Are you sure?"), /*#__PURE__*/React.createElement("p", null, "Please confirm you are ready to submit this visit report."), /*#__PURE__*/React.createElement("p", {
+      className: "route-note"
+    }, "Market ", /*#__PURE__*/React.createElement("b", null, form.market), " → form ", /*#__PURE__*/React.createElement("b", null, ep)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+        width: '100%',
+        maxWidth: 320
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      className: "submit",
+      onClick: handleConfirm
+    }, "✓ Yes, Submit"), /*#__PURE__*/React.createElement("button", {
+      className: "submit",
+      style: {
+        background: '#fff',
+        color: 'var(--navy)',
+        border: '2px solid var(--navy)'
+      },
+      onClick: () => {
+        setConfirming(false);
+        window.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      }
+    }, "← Keep Editing")));
+  }
+  const Req = () => /*#__PURE__*/React.createElement("span", {
+    className: "req"
+  }, " *");
+  return /*#__PURE__*/React.createElement("div", {
+    className: "app"
+  }, /*#__PURE__*/React.createElement("header", null, /*#__PURE__*/React.createElement("h1", null, "Account Visit Report"), /*#__PURE__*/React.createElement("p", null, "Alain Milliat"), /*#__PURE__*/React.createElement("p", {
+    className: "sub"
+  }, "Famille Perrin Inc.")), /*#__PURE__*/React.createElement("form", {
+    onSubmit: handleSubmitClick
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Date Visit", /*#__PURE__*/React.createElement(Req, null)), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    required: true,
+    value: form.dateVisit,
+    onChange: set('dateVisit')
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Market", /*#__PURE__*/React.createElement(Req, null)), /*#__PURE__*/React.createElement("select", {
+    required: true,
+    value: form.market,
+    onChange: set('market')
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select market..."), LEXICON.markets.map(m => /*#__PURE__*/React.createElement("option", {
+    key: m,
+    value: m
+  }, m)))), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "City"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    maxLength: 50,
+    placeholder: "Max 50 characters",
+    value: form.city,
+    onChange: set('city')
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Area / Neighborhood"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    maxLength: 100,
+    placeholder: "eg SoHo, Beverly Hills, Wynwood",
+    value: form.neighborhood,
+    onChange: set('neighborhood')
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Customer Name", /*#__PURE__*/React.createElement(Req, null)), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    required: true,
+    maxLength: 200,
+    placeholder: "Max 200 characters",
+    value: form.customerName,
+    onChange: set('customerName')
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Channel", /*#__PURE__*/React.createElement(Req, null)), /*#__PURE__*/React.createElement("select", {
+    required: true,
+    value: form.channel,
+    onChange: set('channel')
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select channel..."), LEXICON.channels.map(c => /*#__PURE__*/React.createElement("option", {
+    key: c,
+    value: c
+  }, c)))), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Category", /*#__PURE__*/React.createElement(Req, null)), /*#__PURE__*/React.createElement("select", {
+    required: true,
+    value: form.category,
+    onChange: set('category'),
+    disabled: !form.channel
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, form.channel ? 'Select category...' : 'Select channel first'), categories.map(c => /*#__PURE__*/React.createElement("option", {
+    key: c,
+    value: c
+  }, c)))), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Met With"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    maxLength: 200,
+    placeholder: "Name(s), buyer(s) only",
+    value: form.metWith,
+    onChange: set('metWith')
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Position"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    maxLength: 200,
+    placeholder: "Title(s), buyer(s) only",
+    value: form.position,
+    onChange: set('position')
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Buying Role", /*#__PURE__*/React.createElement(Req, null)), /*#__PURE__*/React.createElement("select", {
+    required: true,
+    value: form.buyingRole,
+    onChange: set('buyingRole')
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select role..."), LEXICON.buyingRoles.map(r => /*#__PURE__*/React.createElement("option", {
+    key: r,
+    value: r
+  }, r)))), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Sales Pipeline", /*#__PURE__*/React.createElement(Req, null)), /*#__PURE__*/React.createElement("select", {
+    required: true,
+    value: form.salesPipeline,
+    onChange: set('salesPipeline')
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select stage..."), LEXICON.salesPipeline.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s,
+    value: s
+  }, s)))), /*#__PURE__*/React.createElement("div", {
+    className: "section"
+  }, /*#__PURE__*/React.createElement("h3", null, "Beverage Considered"), /*#__PURE__*/React.createElement(CheckGroup, {
+    options: LEXICON.beverages,
+    selected: form.beverageConsidered,
+    onToggle: toggle('beverageConsidered')
+  }), form.beverageConsidered.length > 0 && /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Placement Specific for Beverage"), /*#__PURE__*/React.createElement(CheckGroup, {
+    options: LEXICON.beveragePlacements,
+    selected: form.beveragePlacement,
+    onToggle: toggle('beveragePlacement')
+  }))), /*#__PURE__*/React.createElement("div", {
+    className: "section"
+  }, /*#__PURE__*/React.createElement("h3", null, "Jam Considered"), /*#__PURE__*/React.createElement(CheckGroup, {
+    options: LEXICON.jams,
+    selected: form.jamConsidered,
+    onToggle: toggle('jamConsidered')
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "section"
+  }, /*#__PURE__*/React.createElement("h3", null, "Condiment Considered"), /*#__PURE__*/React.createElement(CheckGroup, {
+    options: LEXICON.condiments,
+    selected: form.condimentConsidered,
+    onToggle: toggle('condimentConsidered')
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Comments"), /*#__PURE__*/React.createElement("textarea", {
+    maxLength: 600,
+    rows: 3,
+    placeholder: "e.g. SKU sizes, competitor presence, key takeaways",
+    value: form.comments,
+    onChange: set('comments')
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Action Point / Follow Up"), /*#__PURE__*/React.createElement("textarea", {
+    maxLength: 600,
+    rows: 3,
+    placeholder: "Key action points",
+    value: form.actionPoint,
+    onChange: set('actionPoint')
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Preferred Distributor"), /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    maxLength: 200,
+    placeholder: "Max 200 characters",
+    value: form.preferredDistributor,
+    onChange: set('preferredDistributor')
+  })), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Set Up"), /*#__PURE__*/React.createElement("select", {
+    value: form.setUp,
+    onChange: set('setUp')
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select setup..."), LEXICON.setups.map(s => /*#__PURE__*/React.createElement("option", {
+    key: s,
+    value: s
+  }, s)))), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Team Member", /*#__PURE__*/React.createElement(Req, null)), /*#__PURE__*/React.createElement("select", {
+    required: true,
+    value: form.teamMember,
+    onChange: set('teamMember')
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "Select team member..."), LEXICON.teams.map(t => /*#__PURE__*/React.createElement("option", {
+    key: t,
+    value: t
+  }, t)))), /*#__PURE__*/React.createElement("div", {
+    className: "field"
+  }, /*#__PURE__*/React.createElement("label", null, "Pictures"), /*#__PURE__*/React.createElement("input", {
+    type: "file",
+    accept: "image/*",
+    capture: "environment",
+    onChange: handlePhoto
+  }), photoPreview && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("img", {
+    className: "preview",
+    src: photoPreview,
+    alt: "Preview"
+  }), photoStatus === 'uploading' && /*#__PURE__*/React.createElement("p", {
+    className: "hint"
+  }, "⏳ Uploading photo..."), photoStatus === 'done' && /*#__PURE__*/React.createElement("p", {
+    className: "hint",
+    style: {
+      color: 'green'
+    }
+  }, "✓ Photo uploaded"), photoStatus === 'error' && /*#__PURE__*/React.createElement("p", {
+    className: "hint",
+    style: {
+      color: 'red'
+    }
+  }, "Photo upload failed — form will still submit"))), status === 'error' && /*#__PURE__*/React.createElement("p", {
+    className: "error-msg"
+  }, "Something went wrong (check the Market is selected). Please try again."), /*#__PURE__*/React.createElement("button", {
+    className: "submit",
+    type: "submit",
+    disabled: status === 'submitting'
+  }, status === 'submitting' ? 'Saving...' : 'Submit Visit')));
+}
+ReactDOM.createRoot(document.getElementById('root')).render(/*#__PURE__*/React.createElement(App, null));
+  </script>
+</body>
+</html>
